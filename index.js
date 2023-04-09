@@ -3,22 +3,24 @@ const chrome = require("chrome-aws-lambda");
 const puppeteer = require("puppeteer-core");
 
 const app = express();
+
 app.get("/", (req, res) => {
   res.send("Hello, world!");
 });
 
 async function getBrowserInstance() {
-  const options = process.env.AWS_REGION
-    ? {
-        args: chrome.args,
-        executablePath: await chrome.executablePath,
-        headless: chrome.headless,
-      }
-    : {
-        args: [],
-        executablePath:
-          "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-      };
+  const options =
+    process.env.AWS_REGION || process.env.AWS_LAMBDA_FUNCTION_VERSION
+      ? {
+          args: chrome.args,
+          executablePath: await chrome.executablePath,
+          headless: chrome.headless,
+        }
+      : {
+          args: [],
+          executablePath:
+            "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+        };
   const browser = await puppeteer.launch(options);
   return browser;
 }
