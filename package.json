@@ -12,6 +12,9 @@
   },
   "author": "Jns Wnk",
   "license": "ISC",
+  "engines": {
+    "node": "^14"
+  },
   "bugs": {
     "url": "https://github.com/JnsWnk/steamsales-node/issues"
   },

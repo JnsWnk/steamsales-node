@@ -14,7 +14,8 @@ async function getBrowserInstance() {
       ? {
           args: chrome.args,
           executablePath: await chrome.executablePath,
-          headless: chrome.headless,
+          headless: true,
+          defaultViewport: chrome.defaultViewport,
         }
       : {
           args: [],
