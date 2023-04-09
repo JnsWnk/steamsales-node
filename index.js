@@ -1,11 +1,53 @@
 const express = require("express");
-const app = express();
-const port = 3000;
+const chrome = require("chrome-aws-lambda");
+const puppeteer = require("puppeteer-core");
 
+const app = express();
 app.get("/", (req, res) => {
-  res.send("Hello World!");
+  res.send("Hello, world!");
 });
 
-app.listen(port, () => {
-  console.log(`Example app listening on port ${port}`);
+async function getBrowserInstance() {
+  const options = process.env.AWS_REGION
+    ? {
+        args: chrome.args,
+        executablePath: await chrome.executablePath,
+        headless: chrome.headless,
+      }
+    : {
+        args: [],
+        executablePath:
+          "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+      };
+  const browser = await puppeteer.launch(options);
+  return browser;
+}
+
+app.get("/api", async (req, res) => {
+  let options = {};
+
+  if (process.env.AWS_LAMBDA_FUNCTION_VERSION) {
+    options = {
+      args: [...chrome.args, "--hide-scrollbars", "--disable-web-security"],
+      defaultViewport: chrome.defaultViewport,
+      executablePath: await chrome.executablePath,
+      headless: true,
+      ignoreHTTPSErrors: true,
+    };
+  }
+
+  try {
+    let browser = await getBrowserInstance();
+
+    let page = await browser.newPage();
+    await page.goto("https://www.google.com");
+    res.send(await page.title());
+  } catch (err) {
+    console.error(err);
+    return null;
+  }
+});
+
+app.listen(process.env.PORT || 3000, () => {
+  console.log("Server started");
 });
