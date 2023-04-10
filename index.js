@@ -2,9 +2,11 @@ const express = require("express");
 const chrome = require("chrome-aws-lambda");
 const puppeteer = require("puppeteer-core");
 const { EventEmitter } = require("events");
+const cors = require("cors");
 require("dotenv").config();
 
 const app = express();
+app.use(cors());
 
 const eventEmitter = new EventEmitter();
 
@@ -43,36 +45,15 @@ app.get("/google", async (req, res) => {
   }
 });
 
-app.get("/getWhishlist/:id", async (req, res) => {
+app.get("/getWishlist/:id", async (req, res) => {
   const id = req.params.id;
   const games = await getWishlist(id);
+  console.log("Sending wishlist");
   res.status(200).json(games);
 });
 
 app.get("/getDeals/:id", async (req, res) => {
   const id = req.params.id;
-
-  try {
-    const games = await getWishlist(id);
-    for (const game in games) {
-      const gameKeys = await getGameKeys(games[game].name);
-      eventEmitter.emit("gameResponse", JSON.stringify(gameKeys));
-    }
-    eventEmitter.emit("end");
-    res.sendStatus(200);
-  } catch (err) {
-    console.error(err);
-    res.sendStatus(500);
-  }
-});
-
-app.get("/getDealsStream", (req, res) => {
-  res.writeHead(200, {
-    "Content-Type": "text/event-stream",
-    "Cache-Control": "no-cache",
-    Connection: "keep-alive",
-    "Access-Control-Allow-Origin": "*",
-  });
 
   const sendEvent = (event, data) => {
     res.write(`event: ${event}\n`);
@@ -80,8 +61,10 @@ app.get("/getDealsStream", (req, res) => {
   };
 
   eventEmitter.on("gameResponse", (data) => {
+    console.log("sending: " + data);
     sendEvent("gameResponse", data);
   });
+
   eventEmitter.on("end", () => {
     sendEvent("end", "end");
     res.end();
@@ -90,6 +73,31 @@ app.get("/getDealsStream", (req, res) => {
   req.on("close", () => {
     eventEmitter.removeAllListeners();
   });
+
+  try {
+    const games = await getWishlist(id);
+
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+      "Access-Control-Allow-Origin": "*",
+    });
+
+    for (const game in games) {
+      const gameKeys = await getGameKeys(games[game].name);
+      if (gameKeys.length > 0) {
+        games[game]["seller"] = gameKeys[0].name;
+        games[game]["key_price"] = gameKeys[0].price;
+      }
+      eventEmitter.emit("gameResponse", JSON.stringify(games[game]));
+    }
+    eventEmitter.emit("end");
+    res.sendStatus(200);
+  } catch (err) {
+    console.error(err);
+    res.sendStatus(500);
+  }
 });
 
 async function getWishlist(id) {
@@ -139,13 +147,13 @@ async function getGameKeys(name) {
 }
 
 function getGameName(name) {
-  return game
+  return name
     .replace(/[^a-z0-9 ]/gi, "")
     .trim()
     .replace(/\s+/g, "-");
 }
 
-app.listen(process.env.PORT || 3000, () => {
+app.listen(process.env.PORT || 4000, () => {
   console.log("Server started");
 });
 
