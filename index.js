@@ -54,7 +54,20 @@ app.get("/getWishlist/:id", async (req, res) => {
 
 app.get("/getDeals/:id", async (req, res) => {
   const id = req.params.id;
+  console.log("Request for: " + id);
+  try {
+    const games = await getWishlist(id);
 
+    eventEmitter.emit("startEventStream", games);
+
+    res.sendStatus(200);
+  } catch (err) {
+    console.error(err);
+    res.sendStatus(500);
+  }
+});
+
+app.get("/eventStream", async (req, res) => {
   const sendEvent = (event, data) => {
     res.write(`event: ${event}\n`);
     res.write(`data: ${data}\n\n`);
@@ -74,9 +87,8 @@ app.get("/getDeals/:id", async (req, res) => {
     eventEmitter.removeAllListeners();
   });
 
-  try {
-    const games = await getWishlist(id);
-
+  eventEmitter.once("startEventStream", async (games) => {
+    console.log("Starting event stream");
     res.writeHead(200, {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
@@ -85,26 +97,25 @@ app.get("/getDeals/:id", async (req, res) => {
     });
 
     for (const game in games) {
+      console.log(games[game]);
       const gameKeys = await getGameKeys(games[game].name);
       if (gameKeys.length > 0) {
         games[game]["seller"] = gameKeys[0].name;
         games[game]["key_price"] = gameKeys[0].price;
+      } else {
+        games[game]["failed"] = true;
       }
       eventEmitter.emit("gameResponse", JSON.stringify(games[game]));
     }
     eventEmitter.emit("end");
-    res.sendStatus(200);
-  } catch (err) {
-    console.error(err);
-    res.sendStatus(500);
-  }
+  });
 });
 
 async function getWishlist(id) {
   const url = process.env.STEAM_WL_URL.replace("userid", id);
 
   const whishlist = await fetch(url).then((res) => res.json());
-  const games = {};
+  const games = [];
   for (const game in whishlist) {
     if (whishlist[game].prerelease == 1) {
       continue;
@@ -117,7 +128,7 @@ async function getWishlist(id) {
       discount: discount,
       discount_price: (1 - discount / 100) * price,
     };
-    games[game] = gameDetails;
+    games.push(gameDetails);
   }
   return games;
 }
@@ -127,7 +138,7 @@ async function getGameKeys(name) {
   try {
     const browser = await getBrowserInstance();
     const page = await browser.newPage();
-    await page.goto(url);
+    await page.goto(url, { waitUntil: "networkidle2", timeout: 5000 });
 
     const list = await page.evaluate(() => {
       return Array.from(document.querySelectorAll("#offers_table > div")).map(
@@ -142,7 +153,7 @@ async function getGameKeys(name) {
     });
     return list;
   } catch {
-    return null;
+    return [];
   }
 }
 
