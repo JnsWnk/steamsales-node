@@ -1,6 +1,7 @@
 const express = require("express");
 const chrome = require("chrome-aws-lambda");
 const puppeteer = require("puppeteer-core");
+const useProxy = require("puppeteer-page-proxy");
 const { EventEmitter } = require("events");
 const cors = require("cors");
 require("dotenv").config();
@@ -10,40 +11,7 @@ app.use(cors());
 
 const eventEmitter = new EventEmitter();
 
-app.get("/", (req, res) => {
-  res.send("Hello, world!");
-});
-
-async function getBrowserInstance() {
-  const options =
-    process.env.AWS_REGION || process.env.AWS_LAMBDA_FUNCTION_VERSION
-      ? {
-          args: chrome.args,
-          executablePath: await chrome.executablePath,
-          headless: true,
-          defaultViewport: chrome.defaultViewport,
-        }
-      : {
-          args: [],
-          executablePath:
-            "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-        };
-  const browser = await puppeteer.launch(options);
-  return browser;
-}
-
-app.get("/google", async (req, res) => {
-  try {
-    let browser = await getBrowserInstance();
-
-    let page = await browser.newPage();
-    await page.goto("https://www.google.com");
-    res.send(await page.title());
-  } catch (err) {
-    console.error(err);
-    return null;
-  }
-});
+let proxies = [];
 
 app.get("/getWishlist/:id", async (req, res) => {
   const id = req.params.id;
@@ -111,6 +79,23 @@ app.get("/eventStream", async (req, res) => {
   });
 });
 
+async function getBrowserInstance() {
+  const options =
+    process.env.AWS_REGION || process.env.AWS_LAMBDA_FUNCTION_VERSION
+      ? {
+          args: chrome.args,
+          executablePath: await chrome.executablePath,
+          headless: true,
+          defaultViewport: chrome.defaultViewport,
+        }
+      : {
+          args: [],
+          executablePath: process.env.CHROME_LOCATION,
+        };
+  const browser = await puppeteer.launch(options);
+  return browser;
+}
+
 async function getWishlist(id) {
   const url = process.env.STEAM_WL_URL.replace("userid", id);
 
@@ -134,24 +119,43 @@ async function getWishlist(id) {
 }
 
 async function getGameKeys(name) {
+  console.log("Getting keys for: " + name);
   const url = process.env.ALLKEYSHOP_URL.replace("gamename", getGameName(name));
   try {
     const browser = await getBrowserInstance();
-    const page = await browser.newPage();
-    await page.goto(url, { waitUntil: "networkidle2", timeout: 5000 });
+    let page;
+    attempts = 0;
+    success = false;
 
-    const list = await page.evaluate(() => {
-      return Array.from(document.querySelectorAll("#offers_table > div")).map(
-        (div) => ({
-          name: div.querySelector(
-            "span.x-offer-merchant-name.offers-merchant-name"
-          )?.textContent,
-          price: div.querySelector("span.x-offer-buy-btn-in-stock")
-            ?.textContent,
-        })
-      );
-    });
-    return list;
+    while (attempts < 5 && !success) {
+      try {
+        // Get Proxy TODO: doesnt quite work, maybe use proxy with browser
+        page = await browser.newPage();
+        proxy = proxies[Math.floor(Math.random() * proxies.length)];
+        address = "https://" + proxy.ip + ":" + proxy.port;
+        await useProxy(page, address);
+        // Puppeteer query
+        await page.goto(url, { waitUntil: "networkidle2", timeout: 50000 });
+        const list = await page.evaluate(() => {
+          return Array.from(
+            document.querySelectorAll("#offers_table > div")
+          ).map((div) => ({
+            name: div.querySelector(
+              "span.x-offer-merchant-name.offers-merchant-name"
+            )?.textContent,
+            price: div.querySelector("span.x-offer-buy-btn-in-stock")
+              ?.textContent,
+          }));
+        });
+        return list;
+      } catch (err) {
+        console.log(err);
+        attempts++;
+      }
+    }
+    if (!success) {
+      return [];
+    }
   } catch {
     return [];
   }
@@ -164,8 +168,45 @@ function getGameName(name) {
     .replace(/\s+/g, "-");
 }
 
+async function getProxies() {
+  try {
+    console.log("Getting proxies");
+    const browser = await getBrowserInstance();
+    const page = await browser.newPage();
+    await page.goto("https://www.sslproxies.org/");
+
+    proxyList = await page.evaluate(() => {
+      const proxies = [];
+      let count = 0;
+      document.querySelectorAll("tr").forEach((row) => {
+        if (count >= 50) {
+          return;
+        }
+        const ipElement = row.querySelector("td:nth-child(1)");
+        const portElement = row.querySelector("td:nth-child(2)");
+        if (ipElement?.textContent && portElement?.textContent) {
+          const ip = ipElement.textContent.trim();
+          const port = portElement.textContent.trim();
+          const proxy = { ip, port };
+          proxies.push(proxy);
+          count++;
+        }
+      });
+      return proxies;
+    });
+    proxies = proxyList;
+  } catch (err) {
+    console.error(err);
+  }
+}
+
 app.listen(process.env.PORT || 4000, () => {
   console.log("Server started");
+  getProxies();
+  setInterval(async () => {
+    console.log("Interval");
+    await getProxies();
+  }, 30 * 60 * 1000);
 });
 
 module.exports = app;
@@ -236,7 +277,4 @@ async function fetchWithProxy(url: string) {
   throw new Error("All proxies failed");
 }
 
-module.exports = {
-  fetchWithProxy,
-};
 */
