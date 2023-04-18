@@ -3,15 +3,67 @@ const chrome = require("chrome-aws-lambda");
 const puppeteer = require("puppeteer-core");
 const useProxy = require("puppeteer-page-proxy");
 const { EventEmitter } = require("events");
+const mysql = require("mysql2");
+const bcrypt = require("bcrypt");
 const cors = require("cors");
 require("dotenv").config();
 
+const saltRounds = 10;
+
 const app = express();
 app.use(cors());
+app.use(express.json());
 
 const eventEmitter = new EventEmitter();
 
 let proxies = [];
+
+const connection = mysql.createConnection(process.env.DATABASE_URL);
+console.log("Connected to database");
+
+app.post("/auth/register", async (req, res) => {
+  const { name, email, password } = req.body;
+  console.log(name, email, password);
+  const hash = await bcrypt.hash(password, saltRounds);
+  connection.query(
+    "INSERT INTO users (name, email, password) VALUES (?, ?, ?)",
+    [name, email, hash],
+    (err, results, fields) => {
+      if (err) {
+        console.log(err);
+        res.sendStatus(500);
+      } else {
+        res.sendStatus(200);
+      }
+    }
+  );
+});
+
+app.post("/auth/login", async (req, res) => {
+  const { email, password } = req.body;
+  connection.query(
+    "SELECT * FROM users WHERE email = ?",
+    [email],
+    async (err, results, fields) => {
+      if (err) {
+        console.log(err);
+        res.sendStatus(500);
+      } else {
+        if (results.length > 0) {
+          const match = await bcrypt.compare(password, results[0].password);
+          if (match) {
+            const user = results[0];
+            res.status(200).json({ name: user.name, email: user.email });
+          } else {
+            res.status(401).send("Invalid credentials");
+          }
+        } else {
+          res.status(401).send("Invalid credentials");
+        }
+      }
+    }
+  );
+});
 
 app.get("/getWishlist/:id", async (req, res) => {
   const id = req.params.id;
