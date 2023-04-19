@@ -6,9 +6,11 @@ const { EventEmitter } = require("events");
 const mysql = require("mysql2");
 const bcrypt = require("bcrypt");
 const cors = require("cors");
+const jwt = require("jsonwebtoken");
 require("dotenv").config();
 
 const saltRounds = 10;
+const secret = process.env.SECRET;
 
 const app = express();
 app.use(cors());
@@ -22,21 +24,25 @@ const connection = mysql.createConnection(process.env.DATABASE_URL);
 console.log("Connected to database");
 
 app.post("/auth/register", async (req, res) => {
-  const { name, email, password } = req.body;
-  console.log(name, email, password);
-  const hash = await bcrypt.hash(password, saltRounds);
-  connection.query(
-    "INSERT INTO users (name, email, password) VALUES (?, ?, ?)",
-    [name, email, hash],
-    (err, results, fields) => {
-      if (err) {
-        console.log(err);
-        res.sendStatus(500);
-      } else {
-        res.sendStatus(200);
-      }
+  try {
+    const { name, email, password } = req.body;
+    const hash = await bcrypt.hash(password, saltRounds);
+    const results = await connection
+      .promise()
+      .query("INSERT INTO users (name, email, password) VALUES (?, ?, ?)", [
+        name,
+        email,
+        hash,
+      ]);
+    res.sendStatus(200);
+  } catch (err) {
+    if (err.code === "ER_DUP_ENTRY") {
+      res.status(409).send("User already exists");
+    } else {
+      console.log(err);
+      res.status(500).send("Error registering user");
     }
-  );
+  }
 });
 
 app.post("/auth/login", async (req, res) => {
@@ -53,7 +59,14 @@ app.post("/auth/login", async (req, res) => {
           const match = await bcrypt.compare(password, results[0].password);
           if (match) {
             const user = results[0];
-            res.status(200).json({ name: user.name, email: user.email });
+            const token = jwt.sign({ id: user.id }, secret, {
+              expiresIn: process.env.EXPIRES,
+            });
+            res.status(200).json({
+              status: "success",
+              token,
+              user: { id: user.id, name: user.name, email: user.email },
+            });
           } else {
             res.status(401).send("Invalid credentials");
           }
