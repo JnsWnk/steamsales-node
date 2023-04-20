@@ -78,6 +78,13 @@ app.post("/auth/login", async (req, res) => {
   );
 });
 
+app.get("/getKeys", async (req, res) => {
+  //Get query params
+  const { name } = req.query;
+  const keys = await getGameKey(name);
+  res.status(200).json(keys);
+});
+
 app.get("/getWishlist/:id", async (req, res) => {
   const id = req.params.id;
   const games = await getWishlist(id);
@@ -181,6 +188,44 @@ async function getWishlist(id) {
     games.push(gameDetails);
   }
   return games;
+}
+
+async function getGameKey(name) {
+  const url = process.env.ALLKEYSHOP_URL.replace("gamename", getGameName(name));
+
+  const proxy = proxies[Math.floor(Math.random() * proxies.length)];
+  const address = "https://" + proxy.ip + ":" + proxy.port;
+
+  const browser = await puppeteer.launch({
+    executablePath: process.env.CHROME_LOCATION,
+    args: [`--proxy-server=${address}`],
+  });
+
+  try {
+    const page = await browser.newPage();
+
+    await page.goto(url, { waitUntil: "networkidle2" });
+    //get page title
+    const title = await page.title();
+    console.log("title", title);
+
+    const list = await page.evaluate(() => {
+      return Array.from(document.querySelectorAll("#offers_table > div")).map(
+        (div) => ({
+          name: div.querySelector(
+            "span.x-offer-merchant-name.offers-merchant-name"
+          )?.textContent,
+          price: div.querySelector("span.x-offer-buy-btn-in-stock")
+            ?.textContent,
+        })
+      );
+    });
+    console.log(list);
+
+    await browser.close();
+  } catch (err) {
+    console.log("fail", err);
+  }
 }
 
 async function getGameKeys(name) {

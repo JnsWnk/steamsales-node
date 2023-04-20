@@ -1,2 +1,6 @@
 node_modules
 Steamsales.session.sql
+package-lock.json
+settings.json
+.vscode
+.env
