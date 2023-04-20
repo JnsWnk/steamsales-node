@@ -1,6 +1,6 @@
 const express = require("express");
 const chrome = require("chrome-aws-lambda");
-const puppeteer = require("puppeteer-core");
+const puppeteer = require("puppeteer");
 const useProxy = require("puppeteer-page-proxy");
 const { EventEmitter } = require("events");
 const mysql = require("mysql2");
@@ -85,7 +85,7 @@ app.get("/getKeys", async (req, res) => {
   const { name } = req.query;
   const proxy = proxies[Math.floor(Math.random() * proxies.length)];
   const browser = await getBrowserInstance();
-  const keys = await getGameKey(getGameName(name), proxy, browser);
+  const keys = await getGameKey(getGameName(name), proxy);
   res.status(200).json(keys);
 });
 
@@ -162,7 +162,6 @@ async function getBrowserInstance() {
         ? process.env.EXECUTABLE_PATH
         : puppeteer.executablePath(),
     args: [
-      `--proxy-server=${address}`,
       "--no-sandbox",
       "--disable-setuid-sandbox",
       "--single-process",
