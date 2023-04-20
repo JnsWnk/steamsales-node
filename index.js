@@ -84,7 +84,8 @@ app.get("/getKeys", async (req, res) => {
   //Get query params
   const { name } = req.query;
   const proxy = proxies[Math.floor(Math.random() * proxies.length)];
-  const keys = await getGameKey(getGameName(name), proxy);
+  const browser = await getBrowserInstance();
+  const keys = await getGameKey(getGameName(name), proxy, browser);
   res.status(200).json(keys);
 });
 
@@ -155,19 +156,20 @@ app.get("/eventStream", async (req, res) => {
 });
 
 async function getBrowserInstance() {
-  const options =
-    process.env.AWS_REGION || process.env.AWS_LAMBDA_FUNCTION_VERSION
-      ? {
-          args: chrome.args,
-          executablePath: await chrome.executablePath,
-          headless: true,
-          defaultViewport: chrome.defaultViewport,
-        }
-      : {
-          args: [],
-          executablePath: process.env.EXECUTABLE_PATH,
-        };
-  const browser = await puppeteer.launch(options);
+  const browser = await puppeteer.launch({
+    executablePath:
+      process.env.NODE_ENV == "production"
+        ? process.env.EXECUTABLE_PATH
+        : puppeteer.executablePath(),
+    args: [
+      `--proxy-server=${address}`,
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--single-process",
+      "--no-zygote",
+    ],
+    headless: true,
+  });
   return browser;
 }
 
