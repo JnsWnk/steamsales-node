@@ -1,17 +1,17 @@
 const puppeteer = require("puppeteer");
 
 async function getGameKey(name, proxy) {
-  const url = process.env.ALLKEYSHOP_URL.replace("gamename", getGameName(name));
+  const url = process.env.ALLKEYSHOP_URL.replace("gamename", name);
 
-  const address = "https://" + proxy.ip + ":" + proxy.port;
-
+  const address = "" + proxy.ip + ":" + proxy.port;
+  console.log("address", address);
   const browser = await puppeteer.launch({
     executablePath:
       process.env.NODE_ENV == "production"
         ? process.env.EXECUTABLE_PATH
         : puppeteer.executablePath(),
     args: [
-      //`--proxy-server=${address}`,
+      `--proxy-server=${address}`,
       "--no-sandbox",
       "--disable-setuid-sandbox",
       "--single-process",
@@ -22,7 +22,7 @@ async function getGameKey(name, proxy) {
   try {
     const page = await browser.newPage();
 
-    await page.goto(url, { waitUntil: "networkidle2" });
+    await page.goto(url, { waitUntil: "networkidle2", timeout: 50000 });
     //get page title
     const title = await page.title();
     console.log("title", title);
