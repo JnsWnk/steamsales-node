@@ -84,7 +84,7 @@ app.get("/getKeys", async (req, res) => {
   //Get query params
   const { name } = req.query;
   const proxy = proxies[Math.floor(Math.random() * proxies.length)];
-  const keys = await getGameKey(name, proxy);
+  const keys = await getGameKey(getGameName(name), proxy);
   res.status(200).json(keys);
 });
 
@@ -165,7 +165,7 @@ async function getBrowserInstance() {
         }
       : {
           args: [],
-          executablePath: process.env.CHROME_LOCATION,
+          executablePath: process.env.EXECUTABLE_PATH,
         };
   const browser = await puppeteer.launch(options);
   return browser;
@@ -285,7 +285,6 @@ app.listen(process.env.PORT || 4000, () => {
 });
 
 module.exports = app;
-
 // TODO Add Proxies
 /*
   try {
