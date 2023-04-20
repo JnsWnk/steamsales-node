@@ -6,8 +6,17 @@ async function getGameKey(name, proxy) {
   const address = "https://" + proxy.ip + ":" + proxy.port;
 
   const browser = await puppeteer.launch({
-    executablePath: process.env.CHROME_LOCATION,
-    args: [`--proxy-server=${address}`],
+    executablePath:
+      process.env.NODE_ENV == "production"
+        ? process.env.EXECUTABLE_PATH
+        : puppeteer.executablePath(),
+    args: [
+      //`--proxy-server=${address}`,
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--single-process",
+      "--no-zygote",
+    ],
   });
 
   try {
