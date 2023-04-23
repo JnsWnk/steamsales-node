@@ -1,5 +1,4 @@
 const express = require("express");
-const chrome = require("chrome-aws-lambda");
 const puppeteer = require("puppeteer");
 const useProxy = require("puppeteer-page-proxy");
 const { EventEmitter } = require("events");
@@ -8,6 +7,11 @@ const bcrypt = require("bcrypt");
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
 require("dotenv").config();
+
+const puppeteerExtra = require("puppeteer-extra");
+
+const StealthPlugin = require("puppeteer-extra-plugin-stealth");
+puppeteerExtra.use(StealthPlugin());
 
 const { getGameKey } = require("./scrape");
 
@@ -85,7 +89,7 @@ app.get("/getKeys", async (req, res) => {
   const { name } = req.query;
   const proxy = proxies[Math.floor(Math.random() * proxies.length)];
   const browser = await getBrowserInstance();
-  const keys = await getGameKey(getGameName(name), proxy);
+  const keys = await getGameKey(getGameName(name), proxy, browser);
   res.status(200).json(keys);
 });
 
@@ -156,7 +160,7 @@ app.get("/eventStream", async (req, res) => {
 });
 
 async function getBrowserInstance() {
-  const browser = await puppeteer.launch({
+  const browser = await puppeteerExtra.launch({
     executablePath:
       process.env.NODE_ENV == "production"
         ? process.env.EXECUTABLE_PATH
