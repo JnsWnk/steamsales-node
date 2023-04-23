@@ -1,28 +1,19 @@
 const puppeteer = require("puppeteer");
+const puppeteerExtra = require("puppeteer-extra");
 
-async function getGameKey(name, proxy) {
+const StealthPlugin = require("puppeteer-extra-plugin-stealth");
+puppeteerExtra.use(StealthPlugin());
+
+async function getGameKey(name, proxy, browser) {
   const url = process.env.ALLKEYSHOP_URL.replace("gamename", name);
 
-  const address = "" + proxy.ip + ":" + proxy.port;
+  const address = "https://65.109.0.130:8080";
   console.log("address", address);
-  const browser = await puppeteer.launch({
-    executablePath:
-      process.env.NODE_ENV == "production"
-        ? process.env.EXECUTABLE_PATH
-        : puppeteer.executablePath(),
-    args: [
-      `--proxy-server=${address}`,
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--single-process",
-      "--no-zygote",
-    ],
-  });
 
   try {
     const page = await browser.newPage();
 
-    await page.goto(url, { waitUntil: "networkidle2", timeout: 50000 });
+    await page.goto(url, { waitUntil: "networkidle2", timeout: 70000 });
     //get page title
     const title = await page.title();
     console.log("title", title);
