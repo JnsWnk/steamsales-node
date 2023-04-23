@@ -145,18 +145,19 @@ app.get("/eventStream", async (req, res) => {
         console.log(games[game]);
         try {
           const gameKeys = await getGameKeys(games[game].name);
+          if (gameKeys.length > 0) {
+            games[game]["seller"] = gameKeys[0].name;
+            games[game]["key_price"] = gameKeys[0].price;
+          } else {
+            games[game]["failed"] = true;
+          }
         } catch (err) {
           console.log(err);
           games[game]["failed"] = true;
           continue;
+        } finally {
+          eventEmitter.emit("gameResponse", JSON.stringify(games[game]));
         }
-        if (gameKeys.length > 0) {
-          games[game]["seller"] = gameKeys[0].name;
-          games[game]["key_price"] = gameKeys[0].price;
-        } else {
-          games[game]["failed"] = true;
-        }
-        eventEmitter.emit("gameResponse", JSON.stringify(games[game]));
       }
     }
     eventEmitter.emit("end");
