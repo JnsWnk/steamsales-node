@@ -1,6 +1,5 @@
 const express = require("express");
 const puppeteer = require("puppeteer");
-const useProxy = require("puppeteer-page-proxy");
 const { EventEmitter } = require("events");
 const mysql = require("mysql2");
 const bcrypt = require("bcrypt");
@@ -203,38 +202,25 @@ async function getGameKeys(name) {
   const url = process.env.ALLKEYSHOP_URL.replace("gamename", getGameName(name));
   try {
     const browser = await getBrowserInstance();
-    let page;
-    attempts = 0;
-    success = false;
+    try {
+      // Get Proxy TODO: doesnt quite work, maybe use proxy with browser
+      page = await browser.newPage();
 
-    while (attempts < 5 && !success) {
-      try {
-        // Get Proxy TODO: doesnt quite work, maybe use proxy with browser
-        page = await browser.newPage();
-        proxy = proxies[Math.floor(Math.random() * proxies.length)];
-        address = "https://" + proxy.ip + ":" + proxy.port;
-        await useProxy(page, address);
-        // Puppeteer query
-        await page.goto(url, { waitUntil: "networkidle2", timeout: 50000 });
-        const list = await page.evaluate(() => {
-          return Array.from(
-            document.querySelectorAll("#offers_table > div")
-          ).map((div) => ({
+      await page.goto(url, { waitUntil: "networkidle2", timeout: 50000 });
+      const list = await page.evaluate(() => {
+        return Array.from(document.querySelectorAll("#offers_table > div")).map(
+          (div) => ({
             name: div.querySelector(
               "span.x-offer-merchant-name.offers-merchant-name"
             )?.textContent,
             price: div.querySelector("span.x-offer-buy-btn-in-stock")
               ?.textContent,
-          }));
-        });
-        return list;
-      } catch (err) {
-        console.log(err);
-        attempts++;
-      }
-    }
-    if (!success) {
-      return [];
+          })
+        );
+      });
+      return list;
+    } catch (err) {
+      console.log(err);
     }
   } catch {
     return [];
