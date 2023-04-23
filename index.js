@@ -1,5 +1,4 @@
 const express = require("express");
-const puppeteer = require("puppeteer");
 const { EventEmitter } = require("events");
 const mysql = require("mysql2");
 const bcrypt = require("bcrypt");
@@ -7,12 +6,7 @@ const cors = require("cors");
 const jwt = require("jsonwebtoken");
 require("dotenv").config();
 
-const puppeteerExtra = require("puppeteer-extra");
-
-const StealthPlugin = require("puppeteer-extra-plugin-stealth");
-puppeteerExtra.use(StealthPlugin());
-
-const { getGameKey } = require("./scrape");
+const { getGameKeys, getWishlist, getProxies } = require("./scrape");
 
 const saltRounds = 10;
 const secret = process.env.SECRET;
@@ -22,8 +16,6 @@ app.use(cors());
 app.use(express.json());
 
 const eventEmitter = new EventEmitter();
-
-let proxies = [];
 
 const connection = mysql.createConnection(process.env.DATABASE_URL);
 console.log("Connected to database");
@@ -86,17 +78,25 @@ app.post("/auth/login", async (req, res) => {
 app.get("/getKeys", async (req, res) => {
   //Get query params
   const { name } = req.query;
-  const proxy = proxies[Math.floor(Math.random() * proxies.length)];
-  const browser = await getBrowserInstance();
-  const keys = await getGameKey(getGameName(name), proxy, browser);
-  res.status(200).json(keys);
+  try {
+    const keys = await getGameKeys(name);
+    res.status(200).json(keys);
+  } catch (err) {
+    console.log(err);
+    res.sendStatus(500);
+  }
 });
 
 app.get("/getWishlist/:id", async (req, res) => {
   const id = req.params.id;
-  const games = await getWishlist(id);
-  console.log("Sending wishlist");
-  res.status(200).json(games);
+  try {
+    const games = await getWishlist(id);
+    console.log("Sending wishlist");
+    res.status(200).json(games);
+  } catch (err) {
+    console.error(err);
+    res.sendStatus(500);
+  }
 });
 
 app.get("/getDeals/:id", async (req, res) => {
@@ -104,9 +104,7 @@ app.get("/getDeals/:id", async (req, res) => {
   console.log("Request for: " + id);
   try {
     const games = await getWishlist(id);
-
     eventEmitter.emit("startEventStream", games);
-
     res.sendStatus(200);
   } catch (err) {
     console.error(err);
@@ -142,129 +140,28 @@ app.get("/eventStream", async (req, res) => {
       Connection: "keep-alive",
       "Access-Control-Allow-Origin": "*",
     });
-
-    for (const game in games) {
-      console.log(games[game]);
-      const gameKeys = await getGameKeys(games[game].name);
-      if (gameKeys.length > 0) {
-        games[game]["seller"] = gameKeys[0].name;
-        games[game]["key_price"] = gameKeys[0].price;
-      } else {
-        games[game]["failed"] = true;
+    if (games && games.length > 0) {
+      for (const game in games) {
+        console.log(games[game]);
+        try {
+          const gameKeys = await getGameKeys(games[game].name);
+        } catch (err) {
+          console.log(err);
+          games[game]["failed"] = true;
+          continue;
+        }
+        if (gameKeys.length > 0) {
+          games[game]["seller"] = gameKeys[0].name;
+          games[game]["key_price"] = gameKeys[0].price;
+        } else {
+          games[game]["failed"] = true;
+        }
+        eventEmitter.emit("gameResponse", JSON.stringify(games[game]));
       }
-      eventEmitter.emit("gameResponse", JSON.stringify(games[game]));
     }
     eventEmitter.emit("end");
   });
 });
-
-async function getBrowserInstance() {
-  const browser = await puppeteerExtra.launch({
-    executablePath:
-      process.env.NODE_ENV == "production"
-        ? process.env.EXECUTABLE_PATH
-        : puppeteer.executablePath(),
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--single-process",
-      "--no-zygote",
-    ],
-    headless: true,
-  });
-  return browser;
-}
-
-async function getWishlist(id) {
-  const url = process.env.STEAM_WL_URL.replace("userid", id);
-
-  const whishlist = await fetch(url).then((res) => res.json());
-  const games = [];
-  for (const game in whishlist) {
-    if (whishlist[game].prerelease == 1) {
-      continue;
-    }
-    const price = whishlist[game].subs[0].price / 100;
-    const discount = whishlist[game].subs[0].discount_pct;
-    const gameDetails = {
-      name: whishlist[game].name,
-      price: price,
-      discount: discount,
-      discount_price: (1 - discount / 100) * price,
-    };
-    games.push(gameDetails);
-  }
-  return games;
-}
-
-async function getGameKeys(name) {
-  console.log("Getting keys for: " + name);
-  const url = process.env.ALLKEYSHOP_URL.replace("gamename", getGameName(name));
-  try {
-    const browser = await getBrowserInstance();
-    try {
-      // Get Proxy TODO: doesnt quite work, maybe use proxy with browser
-      page = await browser.newPage();
-
-      await page.goto(url, { waitUntil: "networkidle2", timeout: 50000 });
-      const list = await page.evaluate(() => {
-        return Array.from(document.querySelectorAll("#offers_table > div")).map(
-          (div) => ({
-            name: div.querySelector(
-              "span.x-offer-merchant-name.offers-merchant-name"
-            )?.textContent,
-            price: div.querySelector("span.x-offer-buy-btn-in-stock")
-              ?.textContent,
-          })
-        );
-      });
-      return list;
-    } catch (err) {
-      console.log(err);
-    }
-  } catch {
-    return [];
-  }
-}
-
-function getGameName(name) {
-  return name
-    .replace(/[^a-z0-9 ]/gi, "")
-    .trim()
-    .replace(/\s+/g, "-");
-}
-
-async function getProxies() {
-  try {
-    console.log("Getting proxies");
-    const browser = await getBrowserInstance();
-    const page = await browser.newPage();
-    await page.goto("https://www.sslproxies.org/");
-
-    proxyList = await page.evaluate(() => {
-      const proxies = [];
-      let count = 0;
-      document.querySelectorAll("tr").forEach((row) => {
-        if (count >= 50) {
-          return;
-        }
-        const ipElement = row.querySelector("td:nth-child(1)");
-        const portElement = row.querySelector("td:nth-child(2)");
-        if (ipElement?.textContent && portElement?.textContent) {
-          const ip = ipElement.textContent.trim();
-          const port = portElement.textContent.trim();
-          const proxy = { ip, port };
-          proxies.push(proxy);
-          count++;
-        }
-      });
-      return proxies;
-    });
-    proxies = proxyList;
-  } catch (err) {
-    console.error(err);
-  }
-}
 
 app.listen(process.env.PORT || 4000, () => {
   console.log("Server started");
