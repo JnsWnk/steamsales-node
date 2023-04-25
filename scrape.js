@@ -2,12 +2,13 @@ const puppeteer = require("puppeteer");
 const puppeteerExtra = require("puppeteer-extra");
 
 const StealthPlugin = require("puppeteer-extra-plugin-stealth");
+const maxTries = 3;
 puppeteerExtra.use(StealthPlugin());
 
 let proxies = [];
 
-async function getBrowserInstance() {
-  const browser = await puppeteerExtra.launch({
+async function getBrowserInstance(proxy) {
+  const launchOptions = {
     executablePath:
       process.env.NODE_ENV == "production"
         ? process.env.EXECUTABLE_PATH
@@ -19,7 +20,13 @@ async function getBrowserInstance() {
       "--no-zygote",
     ],
     headless: true,
-  });
+  };
+
+  if (proxy) {
+    launchOptions.args.push(`--proxy-server=${proxy}`);
+  }
+
+  const browser = await puppeteerExtra.launch(launchOptions);
   return browser;
 }
 
@@ -38,8 +45,8 @@ async function getWishlist(id) {
     const gameDetails = {
       name: wishlist[game].name,
       price: price,
-      discount: discount,
-      discount_price: (1 - discount / 100) * price,
+      discount: discount == 0 ? "None" : discount + "%",
+      discount_price: ((1 - discount / 100) * price).toFixed(2),
     };
     games.push(gameDetails);
   }
@@ -47,16 +54,17 @@ async function getWishlist(id) {
 }
 
 async function getGameKeys(name) {
-  console.log("Getting keys for: " + name);
   const url = process.env.ALLKEYSHOP_URL.replace("gamename", getGameName(name));
-  try {
-    const browser = await getBrowserInstance();
+  let list = [];
+  let tries = 0;
+  while (list.length == 0 && tries < maxTries) {
+    const proxy = proxies[Math.floor(Math.random() * proxies.length)];
+    const browser = await getBrowserInstance(proxy);
     try {
-      // Get Proxy TODO: doesnt quite work, maybe use proxy with browser
-      page = await browser.newPage();
-
-      await page.goto(url, { waitUntil: "networkidle2", timeout: 50000 });
-      const list = await page.evaluate(() => {
+      console.log("Trying proxy: " + proxy + " for " + name + "");
+      const page = await browser.newPage();
+      await page.goto(url, { waitUntil: "networkidle2", timeout: 25000 });
+      list = await page.evaluate(() => {
         return Array.from(document.querySelectorAll("#offers_table > div")).map(
           (div) => ({
             name: div.querySelector(
@@ -67,13 +75,15 @@ async function getGameKeys(name) {
           })
         );
       });
-      return list;
     } catch (err) {
-      console.log(err);
+      console.log("Proxy failed or took too long: " + proxy);
+    } finally {
+      browser.close();
+      tries++;
+      console.log("Tries: " + tries);
     }
-  } catch {
-    return [];
   }
+  return list;
 }
 
 function getGameName(name) {
@@ -84,9 +94,9 @@ function getGameName(name) {
 }
 
 async function getProxies() {
+  console.log("Getting proxies");
+  const browser = await getBrowserInstance();
   try {
-    console.log("Getting proxies");
-    const browser = await getBrowserInstance();
     const page = await browser.newPage();
     await page.goto("https://www.sslproxies.org/");
 
@@ -102,7 +112,7 @@ async function getProxies() {
         if (ipElement?.textContent && portElement?.textContent) {
           const ip = ipElement.textContent.trim();
           const port = portElement.textContent.trim();
-          const proxy = { ip, port };
+          const proxy = "" + ip + ":" + port;
           proxies.push(proxy);
           count++;
         }
@@ -110,9 +120,12 @@ async function getProxies() {
       return proxies;
     });
     proxies = proxyList;
+    console.log("Got proxies: " + proxies.length);
   } catch (err) {
-    console.error(err);
+    console.error("Error when fetching proxies: " + err);
+  } finally {
+    await browser.close();
   }
 }
 
-module.exports = { getGameKeys, getWishlist, getProxies };
+module.exports = { getGameKeys, getWishlist, getProxies, getGameName };
