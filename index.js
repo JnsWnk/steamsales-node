@@ -6,7 +6,12 @@ const cors = require("cors");
 const jwt = require("jsonwebtoken");
 require("dotenv").config();
 
-const { getGameKeys, getWishlist, getProxies } = require("./scrape");
+const {
+  getGameKeys,
+  getWishlist,
+  getProxies,
+  getGameName,
+} = require("./scrape");
 
 const saltRounds = 10;
 const secret = process.env.SECRET;
@@ -148,6 +153,10 @@ app.get("/eventStream", async (req, res) => {
           if (gameKeys.length > 0) {
             games[game]["seller"] = gameKeys[0].name;
             games[game]["key_price"] = gameKeys[0].price;
+            games[game]["key_url"] = process.env.ALLKEYSHOP_URL.replace(
+              "gamename",
+              getGameName(games[game].name)
+            );
           } else {
             games[game]["failed"] = true;
           }
