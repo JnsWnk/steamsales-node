@@ -64,16 +64,72 @@ app.post("/auth/login", async (req, res) => {
             const token = jwt.sign({ id: user.id }, secret, {
               expiresIn: process.env.EXPIRES,
             });
+            console.log("User logged in: " + user.steamid);
             res.status(200).json({
               status: "success",
               token,
-              user: { id: user.id, name: user.name, email: user.email },
+              user: {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                steamid: user.steamid || null,
+              },
             });
           } else {
             res.status(401).send("Invalid credentials");
           }
         } else {
           res.status(401).send("Invalid credentials");
+        }
+      }
+    }
+  );
+});
+
+app.post("/updateUser", async (req, res) => {
+  const { id, name, email, steamid } = req.body;
+  console.log("Updating user: " + id + "SteamID: " + steamid);
+  connection.query(
+    "UPDATE users SET name = ?, email = ?, steamid = ? WHERE id = ?",
+    [name, email, steamid, id],
+
+    async (err, results, fields) => {
+      if (err) {
+        console.log(err);
+        res.sendStatus(500);
+      } else {
+        console.log(results);
+        if (results.affectedRows > 0) {
+          res.status(200).send("User updated");
+        } else {
+          res.status(401).send("User with this id doesnt exist.");
+        }
+      }
+    }
+  );
+});
+
+app.post("/updatePassword", async (req, res) => {
+  const { id, newPassword } = req.body;
+  console.log("Updating password for user: " + id);
+  if (!newPassword || newPassword.length < 8) {
+    res.status(400).send("Password must be at least 8 characters long");
+    return;
+  }
+  const hash = await bcrypt.hash(newPassword, saltRounds);
+  connection.query(
+    "UPDATE users SET password = ? WHERE id = ?",
+    [hash, id],
+    async (err, results, fields) => {
+      if (err) {
+        console.log(err);
+        res.sendStatus(500);
+      } else {
+        console.log(results);
+        if (results.affectedRows > 0) {
+          res.status(200).send("Password updated");
+        } else {
+          res.status(401).send("No user with this id");
         }
       }
     }

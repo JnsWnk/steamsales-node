@@ -63,7 +63,7 @@ async function getGameKeys(name) {
     try {
       console.log("Trying proxy: " + proxy + " for " + name + "");
       const page = await browser.newPage();
-      await page.goto(url, { waitUntil: "networkidle2", timeout: 25000 });
+      await page.goto(url, { waitUntil: "networkidle2", timeout: 35000 });
       list = await page.evaluate(() => {
         return Array.from(document.querySelectorAll("#offers_table > div")).map(
           (div) => ({
