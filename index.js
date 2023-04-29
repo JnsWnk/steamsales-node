@@ -1,13 +1,17 @@
 const express = require("express");
-const chrome = require("chrome-aws-lambda");
-const puppeteer = require("puppeteer-core");
-const useProxy = require("puppeteer-page-proxy");
 const { EventEmitter } = require("events");
 const mysql = require("mysql2");
 const bcrypt = require("bcrypt");
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
 require("dotenv").config();
+
+const {
+  getGameKeys,
+  getWishlist,
+  getProxies,
+  getGameName,
+} = require("./scrape");
 
 const saltRounds = 10;
 const secret = process.env.SECRET;
@@ -17,8 +21,6 @@ app.use(cors());
 app.use(express.json());
 
 const eventEmitter = new EventEmitter();
-
-let proxies = [];
 
 const connection = mysql.createConnection(process.env.DATABASE_URL);
 console.log("Connected to database");
@@ -62,10 +64,16 @@ app.post("/auth/login", async (req, res) => {
             const token = jwt.sign({ id: user.id }, secret, {
               expiresIn: process.env.EXPIRES,
             });
+            console.log("User logged in: " + user.steamid);
             res.status(200).json({
               status: "success",
               token,
-              user: { id: user.id, name: user.name, email: user.email },
+              user: {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                steamid: user.steamid || null,
+              },
             });
           } else {
             res.status(401).send("Invalid credentials");
@@ -78,18 +86,78 @@ app.post("/auth/login", async (req, res) => {
   );
 });
 
+app.post("/updateUser", async (req, res) => {
+  const { id, name, email, steamid } = req.body;
+  console.log("Updating user: " + id + "SteamID: " + steamid);
+  connection.query(
+    "UPDATE users SET name = ?, email = ?, steamid = ? WHERE id = ?",
+    [name, email, steamid, id],
+
+    async (err, results, fields) => {
+      if (err) {
+        console.log(err);
+        res.sendStatus(500);
+      } else {
+        console.log(results);
+        if (results.affectedRows > 0) {
+          res.status(200).send("User updated");
+        } else {
+          res.status(401).send("User with this id doesnt exist.");
+        }
+      }
+    }
+  );
+});
+
+app.post("/updatePassword", async (req, res) => {
+  const { id, newPassword } = req.body;
+  console.log("Updating password for user: " + id);
+  if (!newPassword || newPassword.length < 8) {
+    res.status(400).send("Password must be at least 8 characters long");
+    return;
+  }
+  const hash = await bcrypt.hash(newPassword, saltRounds);
+  connection.query(
+    "UPDATE users SET password = ? WHERE id = ?",
+    [hash, id],
+    async (err, results, fields) => {
+      if (err) {
+        console.log(err);
+        res.sendStatus(500);
+      } else {
+        console.log(results);
+        if (results.affectedRows > 0) {
+          res.status(200).send("Password updated");
+        } else {
+          res.status(401).send("No user with this id");
+        }
+      }
+    }
+  );
+});
+
 app.get("/getKeys", async (req, res) => {
   //Get query params
   const { name } = req.query;
-  const keys = await getGameKey(name);
-  res.status(200).json(keys);
+  try {
+    const keys = await getGameKeys(name);
+    res.status(200).json(keys);
+  } catch (err) {
+    console.log(err);
+    res.sendStatus(500);
+  }
 });
 
 app.get("/getWishlist/:id", async (req, res) => {
   const id = req.params.id;
-  const games = await getWishlist(id);
-  console.log("Sending wishlist");
-  res.status(200).json(games);
+  try {
+    const games = await getWishlist(id);
+    console.log("Sending wishlist");
+    res.status(200).json(games);
+  } catch (err) {
+    console.error(err);
+    res.sendStatus(500);
+  }
 });
 
 app.get("/getDeals/:id", async (req, res) => {
@@ -97,9 +165,7 @@ app.get("/getDeals/:id", async (req, res) => {
   console.log("Request for: " + id);
   try {
     const games = await getWishlist(id);
-
     eventEmitter.emit("startEventStream", games);
-
     res.sendStatus(200);
   } catch (err) {
     console.error(err);
@@ -135,180 +201,33 @@ app.get("/eventStream", async (req, res) => {
       Connection: "keep-alive",
       "Access-Control-Allow-Origin": "*",
     });
-
-    for (const game in games) {
-      console.log(games[game]);
-      const gameKeys = await getGameKeys(games[game].name);
-      if (gameKeys.length > 0) {
-        games[game]["seller"] = gameKeys[0].name;
-        games[game]["key_price"] = gameKeys[0].price;
-      } else {
-        games[game]["failed"] = true;
+    if (games && games.length > 0) {
+      for (const game in games) {
+        console.log(games[game]);
+        try {
+          const gameKeys = await getGameKeys(games[game].name);
+          if (gameKeys.length > 0) {
+            games[game]["seller"] = gameKeys[0].name;
+            games[game]["key_price"] = gameKeys[0].price;
+            games[game]["key_url"] = process.env.ALLKEYSHOP_URL.replace(
+              "gamename",
+              getGameName(games[game].name)
+            );
+          } else {
+            games[game]["failed"] = true;
+          }
+        } catch (err) {
+          console.log(err);
+          games[game]["failed"] = true;
+          continue;
+        } finally {
+          eventEmitter.emit("gameResponse", JSON.stringify(games[game]));
+        }
       }
-      eventEmitter.emit("gameResponse", JSON.stringify(games[game]));
     }
     eventEmitter.emit("end");
   });
 });
-
-async function getBrowserInstance() {
-  const options =
-    process.env.AWS_REGION || process.env.AWS_LAMBDA_FUNCTION_VERSION
-      ? {
-          args: chrome.args,
-          executablePath: await chrome.executablePath,
-          headless: true,
-          defaultViewport: chrome.defaultViewport,
-        }
-      : {
-          args: [],
-          executablePath: process.env.CHROME_LOCATION,
-        };
-  const browser = await puppeteer.launch(options);
-  return browser;
-}
-
-async function getWishlist(id) {
-  const url = process.env.STEAM_WL_URL.replace("userid", id);
-
-  const whishlist = await fetch(url).then((res) => res.json());
-  const games = [];
-  for (const game in whishlist) {
-    if (whishlist[game].prerelease == 1) {
-      continue;
-    }
-    const price = whishlist[game].subs[0].price / 100;
-    const discount = whishlist[game].subs[0].discount_pct;
-    const gameDetails = {
-      name: whishlist[game].name,
-      price: price,
-      discount: discount,
-      discount_price: (1 - discount / 100) * price,
-    };
-    games.push(gameDetails);
-  }
-  return games;
-}
-
-async function getGameKey(name) {
-  const url = process.env.ALLKEYSHOP_URL.replace("gamename", getGameName(name));
-
-  const proxy = proxies[Math.floor(Math.random() * proxies.length)];
-  const address = "https://" + proxy.ip + ":" + proxy.port;
-
-  const browser = await puppeteer.launch({
-    executablePath: process.env.CHROME_LOCATION,
-    args: [`--proxy-server=${address}`],
-  });
-
-  try {
-    const page = await browser.newPage();
-
-    await page.goto(url, { waitUntil: "networkidle2" });
-    //get page title
-    const title = await page.title();
-    console.log("title", title);
-
-    const list = await page.evaluate(() => {
-      return Array.from(document.querySelectorAll("#offers_table > div")).map(
-        (div) => ({
-          name: div.querySelector(
-            "span.x-offer-merchant-name.offers-merchant-name"
-          )?.textContent,
-          price: div.querySelector("span.x-offer-buy-btn-in-stock")
-            ?.textContent,
-        })
-      );
-    });
-    console.log(list);
-
-    await browser.close();
-  } catch (err) {
-    console.log("fail", err);
-  }
-}
-
-async function getGameKeys(name) {
-  console.log("Getting keys for: " + name);
-  const url = process.env.ALLKEYSHOP_URL.replace("gamename", getGameName(name));
-  try {
-    const browser = await getBrowserInstance();
-    let page;
-    attempts = 0;
-    success = false;
-
-    while (attempts < 5 && !success) {
-      try {
-        // Get Proxy TODO: doesnt quite work, maybe use proxy with browser
-        page = await browser.newPage();
-        proxy = proxies[Math.floor(Math.random() * proxies.length)];
-        address = "https://" + proxy.ip + ":" + proxy.port;
-        await useProxy(page, address);
-        // Puppeteer query
-        await page.goto(url, { waitUntil: "networkidle2", timeout: 50000 });
-        const list = await page.evaluate(() => {
-          return Array.from(
-            document.querySelectorAll("#offers_table > div")
-          ).map((div) => ({
-            name: div.querySelector(
-              "span.x-offer-merchant-name.offers-merchant-name"
-            )?.textContent,
-            price: div.querySelector("span.x-offer-buy-btn-in-stock")
-              ?.textContent,
-          }));
-        });
-        return list;
-      } catch (err) {
-        console.log(err);
-        attempts++;
-      }
-    }
-    if (!success) {
-      return [];
-    }
-  } catch {
-    return [];
-  }
-}
-
-function getGameName(name) {
-  return name
-    .replace(/[^a-z0-9 ]/gi, "")
-    .trim()
-    .replace(/\s+/g, "-");
-}
-
-async function getProxies() {
-  try {
-    console.log("Getting proxies");
-    const browser = await getBrowserInstance();
-    const page = await browser.newPage();
-    await page.goto("https://www.sslproxies.org/");
-
-    proxyList = await page.evaluate(() => {
-      const proxies = [];
-      let count = 0;
-      document.querySelectorAll("tr").forEach((row) => {
-        if (count >= 50) {
-          return;
-        }
-        const ipElement = row.querySelector("td:nth-child(1)");
-        const portElement = row.querySelector("td:nth-child(2)");
-        if (ipElement?.textContent && portElement?.textContent) {
-          const ip = ipElement.textContent.trim();
-          const port = portElement.textContent.trim();
-          const proxy = { ip, port };
-          proxies.push(proxy);
-          count++;
-        }
-      });
-      return proxies;
-    });
-    proxies = proxyList;
-  } catch (err) {
-    console.error(err);
-  }
-}
 
 app.listen(process.env.PORT || 4000, () => {
   console.log("Server started");
@@ -320,71 +239,3 @@ app.listen(process.env.PORT || 4000, () => {
 });
 
 module.exports = app;
-
-// TODO Add Proxies
-/*
-  try {
-    const browser = await getBrowserInstance();
-    const page = await browser.newPage();
-    await page.goto("https://www.sslproxies.org/");
-
-    proxyList = await page.evaluate(() => {
-      const proxies: { ip: string; port: string }[] = [];
-      let count = 0;
-      document.querySelectorAll("tbody tr").forEach((row) => {
-        console.log(row);
-        if (count >= 10) {
-          return;
-        }
-        const ipElement = row.querySelector("td:nth-child(1)");
-        const portElement = row.querySelector("td:nth-child(2)");
-        if (ipElement?.textContent && portElement?.textContent) {
-          const ip = ipElement.textContent.trim();
-          const port = portElement.textContent.trim();
-          const proxy = { ip, port };
-          proxies.push(proxy);
-          count++;
-        }
-      });
-      return proxies;
-    });
-
-    await browser.close();
-    console.log(proxyList);
-    res.status(200).json(proxyList);
-  } catch {
-    res.status(500);
-  }
-}
-
-
-
-async function fetchWithProxy(url: string) {
-  let proxyIndex = 0;
-  let response;
-
-  while (!response && proxyIndex < proxies.length) {
-    const proxy = proxies[proxyIndex];
-    const config = {
-      proxy: {
-        host: proxy.host,
-        port: proxy.port,
-        httpsAgent: new HttpsProxyAgent(`http://${proxy.host}:${proxy.port}`),
-      },
-    };
-    try {
-      response = await axios.get(url, config);
-      console.log(`Request successful using proxy ${proxy.host}:${proxy.port}`);
-      return response.data;
-    } catch (error: any) {
-      console.log(
-        `Request failed using proxy ${proxy.host}:${proxy.port}: ${error.message}`
-      );
-      proxyIndex++;
-    }
-  }
-
-  throw new Error("All proxies failed");
-}
-
-*/
