@@ -136,6 +136,39 @@ app.post("/updatePassword", async (req, res) => {
   );
 });
 
+app.get("/getUser/:id", async (req, res) => {
+  const id = req.params.id;
+  connection.query(
+    "SELECT * FROM users WHERE id = ?",
+    [id],
+    async (err, results, fields) => {
+      if (err) {
+        console.log(err);
+        res.sendStatus(500);
+      } else {
+        if (results.length > 0) {
+          const user = results[0];
+          const token = jwt.sign({ id: user.id }, secret, {
+            expiresIn: process.env.EXPIRES,
+          });
+          res.status(200).json({
+            status: "success",
+            token,
+            user: {
+              id: user.id,
+              name: user.name,
+              email: user.email,
+              steamid: user.steamid || null,
+            },
+          });
+        } else {
+          res.status(401).send("No user with this id");
+        }
+      }
+    }
+  );
+});
+
 app.get("/getKeys", async (req, res) => {
   //Get query params
   const { name } = req.query;
