@@ -110,27 +110,36 @@ app.post("/updateUser", async (req, res) => {
 });
 
 app.post("/updatePassword", async (req, res) => {
-  const { id, newPassword } = req.body;
-  console.log("Updating password for user: " + id);
+  const { id, oldPassword, newPassword } = req.body;
+  console.log("Updating password for user: " + id, oldPassword, newPassword);
   if (!newPassword || newPassword.length < 8) {
     res.status(400).send("Password must be at least 8 characters long");
     return;
   }
-  const hash = await bcrypt.hash(newPassword, saltRounds);
   connection.query(
-    "UPDATE users SET password = ? WHERE id = ?",
-    [hash, id],
+    "SELECT * FROM users WHERE id = ?",
+    [id],
     async (err, results, fields) => {
-      if (err) {
-        console.log(err);
-        res.sendStatus(500);
-      } else {
-        console.log(results);
-        if (results.affectedRows > 0) {
-          res.status(200).send("Password updated");
+      if (!err && results.length > 0) {
+        const match = await bcrypt.compare(oldPassword, results[0].password);
+        if (match) {
+          const hash = await bcrypt.hash(newPassword, saltRounds);
+          connection.query(
+            "UPDATE users SET password = ? WHERE id = ?",
+            [hash, id],
+            async (error, results, fields) => {
+              if (!error && results.affectedRows > 0) {
+                res.status(200).send("Password updated");
+              } else {
+                res.status(500).send("Error updating password");
+              }
+            }
+          );
         } else {
-          res.status(401).send("No user with this id");
+          res.status(401).send("Invalid credentials");
         }
+      } else {
+        res.status(401).send("Invalid credentials");
       }
     }
   );
