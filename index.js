@@ -6,6 +6,8 @@ const { connect } = require("./utils/db");
 
 const app = express();
 
+startServer();
+
 //Import routes
 const auth = require("./routes/auth");
 const games = require("./routes/games");
@@ -22,17 +24,17 @@ app.use("/user", user);
 
 async function startServer() {
   await connect();
-  await getProxies();
-  setInterval(async () => {
-    console.log("Interval");
-    await getProxies();
-  }, 60 * 60 * 1000);
+  setTimeout(() => {
+    getProxies();
+    setInterval(async () => {
+      console.log("Interval");
+      await getProxies();
+    }, 60 * 60 * 1000);
 
-  app.listen(process.env.PORT || 4000, () => {
-    console.log("Server started");
-  });
+    app.listen(process.env.PORT || 4000, () => {
+      console.log("Server started");
+    });
+  }, 10000);
 }
-
-startServer();
 
 module.exports = app;
