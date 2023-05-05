@@ -9,6 +9,8 @@ const eventEmitter = new EventEmitter();
 router.get("/getKeys", keyController.getGameKeys);
 router.get("/getKeysForWishlist", keyController.getKeysForWishlist);
 
+module.exports = router;
+
 // Still have to figure out where to put this
 /* app.get("/eventStream", async (req, res) => {
   const sendEvent = (event, data) => {
