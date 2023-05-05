@@ -47,17 +47,22 @@ class UserService {
   async loginUser(email, password) {
     const connection = await getConnection();
     try {
-      const results = this.db
+      const [rows, fields] = await connection
         .promise()
-        .query("SELECT id, name, email, steamid FROM users WHERE email = ?", [
-          email,
-        ]);
-      if (results[0].length === 0) {
+        .query("SELECT * FROM users WHERE email = ?", [email]);
+      if (rows.length === 0) {
         throw new Error("User not found");
       }
-      const match = await bcrypt.compare(password, results[0].password);
+      const user = rows[0];
+      const match = await bcrypt.compare(password, user.password);
       if (match) {
-        return results[0];
+        console.log(user);
+        return {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          steamid: user.steamid,
+        };
       } else {
         throw new Error("Invalid credentials");
       }
@@ -93,14 +98,16 @@ class UserService {
     const connection = await getConnection();
 
     try {
-      const result = connection.query("SELECT * FROM users WHERE id = ?", [id]);
+      const [result] = await connection
+        .promise()
+        .query("SELECT * FROM users WHERE id = ?", [id]);
       if (result.length == 0) {
         throw new Error("User not found");
       }
       const match = await bcrypt.compare(oldPassword, result[0].password);
       if (match) {
         const hash = await this.hash(newPassword);
-        const results = connection
+        const [results] = await connection
           .promise()
           .query("UPDATE users SET password = ? WHERE id = ?", [hash, id]);
         if (results.affectedRows == 0) {
