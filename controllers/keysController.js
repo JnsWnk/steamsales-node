@@ -16,11 +16,11 @@ exports.getGameKeys = async (req, res) => {
 };
 
 exports.getKeysForWishlist = async (req, res) => {
-  const id = req.params.id;
+  const id = req.query.id;
   try {
     const wishlist = await wishlistService.getWishlist(id);
     //TODO: Get keys for each game in wishlist
-    res.sendStatus(200).json(wishlist);
+    res.status(200).json(wishlist);
   } catch (err) {
     console.error(err);
     res.sendStatus(500);

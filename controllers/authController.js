@@ -7,7 +7,7 @@ exports.register = async (req, res) => {
   try {
     const { name, email, password } = req.body;
     const user = await userService.createUser(name, email, password);
-    res.json(user).sendStatus(200);
+    res.status(200).json(user);
   } catch (err) {
     if (err.code === "ER_DUP_ENTRY") {
       res.status(409).send("User already exists");
