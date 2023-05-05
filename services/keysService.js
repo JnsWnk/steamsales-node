@@ -45,3 +45,5 @@ class KeysService {
       .replace(/\s+/g, "-");
   }
 }
+
+module.exports = KeysService;

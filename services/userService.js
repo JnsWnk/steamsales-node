@@ -1,16 +1,15 @@
 const bcrypt = require("bcrypt");
 const saltRounds = 10;
-const { getDb } = require("../utils/db");
+const { getConnection } = require("../utils/db");
 
 class UserService {
-  constructor(db) {
-    this.db = db || getDb();
-  }
+  constructor() {}
 
   async createUser(name, email, password) {
+    const connection = await getConnection();
     try {
       const hash = await this.hash(password);
-      const results = await this.db
+      const results = await connection
         .promise()
         .query("INSERT INTO users (name, email, password) VALUES (?, ?, ?)", [
           name,
@@ -23,12 +22,15 @@ class UserService {
       return results[0];
     } catch (error) {
       throw new Error(`Error creating user: ${error.message}`);
+    } finally {
+      connection.release();
     }
   }
 
   async getUserById(id) {
+    const connection = await getConnection();
     try {
-      const results = await this.db
+      const results = await connection
         .promise()
         .query("SELECT id, name, email, steamid FROM users WHERE id = ?", [id]);
       if (results[0].length === 0) {
@@ -37,10 +39,13 @@ class UserService {
       return results[0];
     } catch (error) {
       throw new Error(`Error getting user: ${error.message}`);
+    } finally {
+      connection.release();
     }
   }
 
   async loginUser(email, password) {
+    const connection = await getConnection();
     try {
       const results = this.db
         .promise()
@@ -58,10 +63,13 @@ class UserService {
       }
     } catch (error) {
       throw new Error(`Error logging in user: ${error.message}`);
+    } finally {
+      connection.release();
     }
   }
 
   async updateUser(id, name, email, steamid) {
+    const connection = await getConnection();
     try {
       const results = connection
         .promise()
@@ -76,10 +84,14 @@ class UserService {
       return updatedUser;
     } catch (error) {
       throw new Error(`Error updating user: ${error.message}`);
+    } finally {
+      connection.release();
     }
   }
 
   async updatePassword(id, oldPassword, newPassword) {
+    const connection = await getConnection();
+
     try {
       const result = connection.query("SELECT * FROM users WHERE id = ?", [id]);
       if (result.length == 0) {
@@ -100,6 +112,8 @@ class UserService {
       }
     } catch (error) {
       throw new Error(`Error updating user: ${error.message}`);
+    } finally {
+      connection.release();
     }
   }
 
@@ -107,3 +121,5 @@ class UserService {
     return await bcrypt.hash(password, saltRounds);
   }
 }
+
+module.exports = UserService;
