@@ -1,30 +1,14 @@
 const mysql = require("mysql2");
 
-let client;
+const pool = mysql.createPool(process.env.DATABASE_URL + "&connectionLimit=10");
 
-async function connect() {
+async function getConnection() {
   return new Promise((resolve, reject) => {
-    client = mysql.createConnection(process.env.DATABASE_URL);
-    client.connect((err) => {
-      if (err) {
-        console.error("Error connecting to database:", err);
-        reject(err);
-      } else {
-        console.log("Connected to database");
-        resolve();
-      }
+    pool.getConnection((err, connection) => {
+      if (err) return reject(err);
+      resolve(connection);
     });
   });
 }
 
-function getDb() {
-  if (!client) {
-    throw new Error("Call connect first!");
-  }
-  return client;
-}
-
-module.exports = {
-  connect,
-  getDb,
-};
+module.exports = { getConnection };

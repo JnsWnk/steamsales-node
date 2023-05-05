@@ -1,6 +1,7 @@
 const UserService = require("../services/userService");
 const { getDb } = require("../utils/db");
-const userService = new UserService(getDb());
+
+const userService = new UserService();
 
 exports.register = async (req, res) => {
   try {

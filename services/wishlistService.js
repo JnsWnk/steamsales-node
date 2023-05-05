@@ -24,3 +24,5 @@ class WishlistService {
     return games;
   }
 }
+
+module.exports = WishlistService;
