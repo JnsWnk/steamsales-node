@@ -8,10 +8,11 @@ const userService = new UserService();
 
 exports.updateUser = async (req, res) => {
   const { id, name, email, steamid } = req.body;
+  console.log(req);
   console.log("Updating user: " + id + "SteamID: " + steamid);
   try {
     const user = await userService.updateUser(id, name, email, steamid);
-    res.status(200).json(user).send("User updated");
+    res.status(200).json(user);
   } catch (err) {
     console.log(err);
     res.sendStatus(500);
@@ -27,7 +28,7 @@ exports.updatePassword = async (req, res) => {
   }
   try {
     const user = await userService.updatePassword(id, oldPassword, newPassword);
-    res.status(200).json(user).send("Password updated");
+    res.status(200).json(user);
   } catch (err) {
     console.log(err);
     res.sendStatus(500);
