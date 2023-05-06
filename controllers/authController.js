@@ -12,7 +12,7 @@ exports.register = async (req, res) => {
     if (err.code === "ER_DUP_ENTRY") {
       res.status(409).send("User already exists");
     } else {
-      console.log(err);
+      console.log("Error registering user");
       res.status(500).send("Error registering user");
     }
   }
@@ -24,7 +24,7 @@ exports.login = async (req, res) => {
     const user = await userService.loginUser(email, password);
     res.status(200).json(user);
   } catch (err) {
-    console.log(err);
+    console.log("Invalid credentials for login.");
     res.status(500).send("Invalid credentials");
   }
 };

@@ -2,21 +2,22 @@ const { getBrowser } = require("../utils/puppeteer");
 
 class KeysService {
   constructor() {
-    this.keyurl = process.env.KEYS_URL;
+    this.keyurl = process.env.ALLKEYSHOP_URL;
     this.maxTries = 3;
   }
 
+  // returns list of objects with name and price
   async getGameKeys(name) {
-    const url = this.keyurl.replace("gamename", getGameName(name));
-    let list = [];
+    const url = this.keyurl.replace("gamename", this.getGameName(name));
+    let key;
     let tries = 0;
-    while (list.length == 0 && tries < maxTries) {
+    while (!key && tries < this.maxTries) {
       const browser = await getBrowser(true);
       try {
-        console.log("Trying proxy: " + proxy + " for " + name + "");
+        console.log("Attempt " + (tries + 1) + " to get keys for " + name);
         const page = await browser.newPage();
         await page.goto(url, { waitUntil: "networkidle2", timeout: 35000 });
-        list = await page.evaluate(() => {
+        let list = await page.evaluate(() => {
           return Array.from(
             document.querySelectorAll("#offers_table > div")
           ).map((div) => ({
@@ -27,15 +28,23 @@ class KeysService {
               ?.textContent,
           }));
         });
+        const price = parseFloat(list[0].price.replace(/€|\$/, "").trim());
+        key = {
+          price: price,
+          name: list[0].name,
+        };
       } catch (err) {
-        console.log("Proxy failed or took too long: " + proxy);
+        console.log("Proxy failed or took too long.");
       } finally {
         browser.close();
         tries++;
-        console.log("Tries: " + tries);
       }
     }
-    return list;
+    if (key) {
+      return key;
+    }
+    console.log("Failed to get keys for " + name);
+    return {};
   }
 
   getGameName(name) {
