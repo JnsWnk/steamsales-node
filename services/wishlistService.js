@@ -10,7 +10,10 @@ class WishlistService {
       const wishlist = await request.json();
       const games = [];
       for (const game in wishlist) {
-        if (wishlist[game].prerelease == 1) {
+        if (
+          wishlist[game].subs.length === 0 ||
+          wishlist[game].prerelease == 1
+        ) {
           continue;
         }
         const price = wishlist[game].subs[0].price / 100;
@@ -19,6 +22,8 @@ class WishlistService {
           name: wishlist[game].name,
           steampriceog: price,
           steampricedc: ((1 - discount / 100) * price).toFixed(2),
+          imglink: wishlist[game].capsule,
+          release: wishlist[game].release_date,
         };
         games.push(gameDetails);
       }
