@@ -23,6 +23,7 @@ async function getBrowser(withProxy = false) {
 
   if (withProxy) {
     const proxy = proxies[Math.floor(Math.random() * proxies.length)];
+    console.log(proxy);
     launchOptions.args.push(`--proxy-server=${proxy}`);
   }
 

@@ -8,20 +8,18 @@ const userService = new UserService();
 
 exports.updateUser = async (req, res) => {
   const { id, name, email, steamid } = req.body;
-  console.log(req);
-  console.log("Updating user: " + id + "SteamID: " + steamid);
+  console.log("Updating user: " + id);
   try {
     const user = await userService.updateUser(id, name, email, steamid);
     res.status(200).json(user);
   } catch (err) {
-    console.log(err);
     res.sendStatus(500);
   }
 };
 
 exports.updatePassword = async (req, res) => {
   const { id, oldPassword, newPassword } = req.body;
-  console.log("Updating password for user: " + id, oldPassword, newPassword);
+  console.log("Updating password for user: " + id);
   if (!newPassword || newPassword.length < 8) {
     res.status(400).send("Password must be at least 8 characters long");
     return;
@@ -30,7 +28,6 @@ exports.updatePassword = async (req, res) => {
     const user = await userService.updatePassword(id, oldPassword, newPassword);
     res.status(200).json(user);
   } catch (err) {
-    console.log(err);
     res.sendStatus(500);
   }
 };
@@ -41,7 +38,6 @@ exports.getUser = async (req, res) => {
     const user = await userService.getUserById(id);
     res.status(200).json(user);
   } catch (err) {
-    console.log(err);
     res.sendStatus(500);
   }
 };
