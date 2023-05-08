@@ -3,7 +3,7 @@ const { getBrowser } = require("../utils/puppeteer");
 class KeysService {
   constructor() {
     this.keyurl = process.env.ALLKEYSHOP_URL;
-    this.maxTries = 3;
+    this.maxTries = 4;
   }
 
   // returns list of objects with name and price
@@ -14,9 +14,8 @@ class KeysService {
     while (!key && tries < this.maxTries) {
       const browser = await getBrowser(true);
       try {
-        console.log("Attempt " + (tries + 1) + " to get keys for " + name);
         const page = await browser.newPage();
-        await page.goto(url, { waitUntil: "networkidle2", timeout: 35000 });
+        await page.goto(url, { waitUntil: "networkidle2", timeout: 30000 });
         let list = await page.evaluate(() => {
           return Array.from(
             document.querySelectorAll("#offers_table > div")
@@ -33,6 +32,7 @@ class KeysService {
           price: price,
           name: list[0].name,
         };
+        console.log("Got keys for " + name);
       } catch (err) {
         console.log("Proxy failed or took too long.");
       } finally {
@@ -44,7 +44,7 @@ class KeysService {
       return key;
     }
     console.log("Failed to get keys for " + name);
-    return {};
+    return null;
   }
 
   getGameName(name) {
