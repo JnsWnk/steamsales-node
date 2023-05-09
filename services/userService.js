@@ -56,7 +56,7 @@ class UserService {
       const user = rows[0];
       const match = await bcrypt.compare(password, user.password);
       if (match) {
-        console.log(user);
+        console.log("Login: ", user);
         return {
           id: user.id,
           name: user.name,

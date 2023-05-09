@@ -1,6 +1,7 @@
 const puppeteer = require("puppeteer");
 const puppeteerExtra = require("puppeteer-extra");
 const StealthPlugin = require("puppeteer-extra-plugin-stealth");
+const testProxy = require("./proxy");
 
 puppeteerExtra.use(StealthPlugin());
 
@@ -23,6 +24,7 @@ async function getBrowser(withProxy = false) {
 
   if (withProxy) {
     const proxy = proxies[Math.floor(Math.random() * proxies.length)];
+    console.log(proxy);
     launchOptions.args.push(`--proxy-server=${proxy}`);
   }
 
@@ -41,7 +43,7 @@ async function getProxies() {
       const proxies = [];
       let count = 0;
       document.querySelectorAll("tr").forEach((row) => {
-        if (count >= 50) {
+        if (count >= 10) {
           return;
         }
         const ipElement = row.querySelector("td:nth-child(1)");
@@ -57,7 +59,8 @@ async function getProxies() {
       return proxies;
     });
     proxies = proxyList;
-    console.log("Got proxies: " + proxies.length);
+    // test proxies and remove the ones that don't work
+    // testProxies(proxyList)
   } catch (err) {
     console.error("Error when fetching proxies: " + err);
   } finally {
