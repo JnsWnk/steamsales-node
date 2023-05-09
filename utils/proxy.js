@@ -2,7 +2,7 @@ const axios = require("axios");
 
 const testProxy = async (proxy) => {
   const url = "https://www.google.com/";
-  const timeout = 5000; // Adjust the timeout value as per your requirements
+  const timeout = 10000;
 
   try {
     const response = await axios.get(url, {
